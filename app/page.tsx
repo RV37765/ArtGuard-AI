@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import VoiceInput from "@/components/VoiceInput";
 import ChatLog from "@/components/ChatLog";
 import AnimatedCamera from "@/components/AnimatedCamera";
+import AlertPanel from "@/components/AlertPanel";
+import StatsDisplay from "@/components/StatsDisplay";
 import { museumData } from "@/lib/museumData";
 import { getSmartResponse } from "@/lib/smartResponses";
 import { speak, isSupported as ttsSupported, stop as stopTTS } from "@/lib/textToSpeech";
@@ -12,7 +14,7 @@ import { cameraFloorMaps } from "@/lib/mapDefinitions";
 const HEADER_TITLE = "ArtGuard AI";
 const MAX_MESSAGES = 200;
 
-function CameraDisplay({ cameras = [], focusedCamera, alerts = [] }: { cameras?: any[]; focusedCamera: number | null; alerts?: any[] }) {
+function CameraDisplay({ cameras = [], focusedCamera, alerts = [], onSuspiciousActivity }: { cameras?: any[]; focusedCamera: number | null; alerts?: any[]; onSuspiciousActivity: (cameraId: number, dot: any) => void }) {
   // If a camera is focused, show only that camera in a larger view
   if (focusedCamera) {
     const camera = cameras.find((c) => c.id === focusedCamera);
@@ -50,7 +52,7 @@ function CameraDisplay({ cameras = [], focusedCamera, alerts = [] }: { cameras?:
             isFocused={true}
             hasAlert={alerts.some((a) => a.camera === camera.id)}
             floorMap={scaledMap}
-            onSuspiciousActivity={(dot: any) => console.log('Suspicious activity detected:', camera.id, dot)}
+            onSuspiciousActivity={(dot: any) => onSuspiciousActivity(camera.id, dot)}
           />
         </div>
       );
@@ -79,7 +81,7 @@ function CameraDisplay({ cameras = [], focusedCamera, alerts = [] }: { cameras?:
               isFocused={false}
               hasAlert={alerts.some((a) => a.camera === camera.id)}
               floorMap={floorMap}
-              onSuspiciousActivity={(dot: any) => console.log('Suspicious activity detected:', camera.id, dot)}
+              onSuspiciousActivity={(dot: any) => onSuspiciousActivity(camera.id, dot)}
             />
           </div>
         );
@@ -88,25 +90,6 @@ function CameraDisplay({ cameras = [], focusedCamera, alerts = [] }: { cameras?:
   );
 }
 
-function AlertPanelPlaceholder({ alerts = [] }: { alerts?: any[] }) {
-  return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-      <div className="text-gray-100 font-medium mb-2">Alerts</div>
-      {alerts.length === 0 ? (
-        <div className="text-gray-400 text-sm">No active alerts.</div>
-      ) : (
-        <ul className="space-y-2">
-          {alerts.map((a) => (
-            <li key={a.id} className="text-sm bg-gray-700/60 border border-gray-600 rounded p-2 text-gray-200">
-              <span className="font-semibold mr-2">[{a.severity.toUpperCase()}]</span>
-              {a.message} <span className="opacity-70">({a.time})</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 export default function Page() {
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([
@@ -115,8 +98,14 @@ export default function Page() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [focusedCamera, setFocusedCamera] = useState<number | null>(null);
   const [input, setInput] = useState("");
+  const [dynamicAlerts, setDynamicAlerts] = useState<any[]>([]);
+  const alertCooldownRef = useRef<{ [cameraId: number]: number }>({});
 
-  const context = useMemo(() => museumData, []);
+  const context = useMemo(() => {
+    // Merge static alerts with dynamic alerts
+    const allAlerts = [...museumData.alerts, ...dynamicAlerts];
+    return { ...museumData, alerts: allAlerts };
+  }, [dynamicAlerts]);
 
   const addMessage = useCallback((role: string, content: string) => {
     setMessages((prev) => [...prev, { role, content }].slice(-MAX_MESSAGES));
@@ -136,6 +125,56 @@ export default function Page() {
       console.warn("🚨 [EMERGENCY]:", effects.emergency);
     }
   }, []);
+
+  const handleAlertClick = useCallback((alert: any) => {
+    if (alert.camera) {
+      setFocusedCamera(alert.camera);
+      const camera = museumData.cameras.find(c => c.id === alert.camera);
+      if (camera) {
+        addMessage("assistant", `Focusing on ${camera.name} for investigation.`);
+      }
+    }
+  }, [addMessage]);
+
+  const handleSuspiciousActivity = useCallback((cameraId: number, dot: any) => {
+    const camera = museumData.cameras.find(c => c.id === cameraId);
+    if (!camera) return;
+
+    const now = Date.now();
+    const lastAlertTime = alertCooldownRef.current[cameraId] || 0;
+    const cooldownPeriod = 60000; // 60 seconds between alerts per camera
+
+    // Check cooldown - don't spam alerts
+    if (now - lastAlertTime < cooldownPeriod) {
+      return;
+    }
+
+    // Update cooldown timestamp
+    alertCooldownRef.current[cameraId] = now;
+
+    const newAlert = {
+      id: `alert-${now}-${cameraId}`,
+      severity: "high",
+      type: "suspicious-activity",
+      message: `Suspicious loitering detected - ${camera.room}`,
+      location: camera.room,
+      camera: cameraId,
+      timestamp: "Just now",
+      status: "active",
+      autoGenerated: true,
+      createdAt: now
+    };
+
+    setDynamicAlerts(prev => [newAlert, ...prev]);
+    addMessage("assistant", `⚠️ Alert: ${newAlert.message}`);
+
+    // Speak the alert if TTS is supported
+    if (ttsSupported()) {
+      speak(`Alert: Suspicious loitering detected at ${camera.room}`);
+    }
+
+    console.log('🚨 New alert generated:', newAlert);
+  }, [addMessage]);
 
   const handleCommand = useCallback(
     async (commandText: string) => {
@@ -208,19 +247,14 @@ export default function Page() {
               <div className="text-gray-100 font-medium">Camera Feeds</div>
               <div className="text-xs text-gray-400">{focusedCamera ? `Focused: ${focusedCamera}` : "All feeds"}</div>
             </div>
-            <CameraDisplay cameras={context.cameras} focusedCamera={focusedCamera} alerts={context.alerts} />
+            <CameraDisplay cameras={context.cameras} focusedCamera={focusedCamera} alerts={context.alerts} onSuspiciousActivity={handleSuspiciousActivity} />
           </div>
 
-          <AlertPanelPlaceholder alerts={context.alerts} />
+          {/* @ts-ignore - AlertPanel is a JSX component */}
+          <AlertPanel alerts={context.alerts} onAlertClick={handleAlertClick} />
 
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 text-sm text-gray-300">
-            <div className="font-medium text-gray-100 mb-2">Stats</div>
-            <div className="flex gap-6">
-              <div>{context.cameras.filter((c) => c.status === "active").length}/{context.cameras.length} cameras online</div>
-              <div>{context.guards.filter((g) => g.status === "on-duty").length}/{context.guards.length} guards on duty</div>
-              <div>{context.alerts.length} active alerts</div>
-            </div>
-          </div>
+          {/* @ts-ignore - StatsDisplay is a JSX component */}
+          <StatsDisplay museumData={context} />
         </div>
       </div>
     </main>
