@@ -29,9 +29,9 @@ const AnimatedCamera = ({
 
   // Configuration
   const minDots = 10;
-  const maxDots = 25;
-  const speedThreshold = 0.045; // below this considered slow (lowered from 0.075 to reduce false positives)
-  const suspiciousTime = 6200; // ms to turn red (increased from 3500 to require longer stationary time)
+  const maxDots = 35;
+  const speedThreshold = 0.025; // below this considered slow - very low to catch only truly stationary dots
+  const suspiciousTime = 8000; // ms to turn red (12 seconds - people naturally pause to view art)
 
   // Initialize dots once
   useEffect(() => {
