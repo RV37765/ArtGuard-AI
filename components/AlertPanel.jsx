@@ -123,7 +123,10 @@ export default function AlertPanel({ alerts = [], onDismiss, onAlertClick }) {
                                         </p>
                                         {onDismiss && (
                                             <button
-                                                onClick={() => onDismiss(alert.id)}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onDismiss(alert.id);
+                                                }}
                                                 className="text-gray-500 hover:text-gray-300 transition-colors"
                                                 aria-label="Dismiss alert"
                                             >

@@ -99,13 +99,15 @@ export default function Page() {
   const [focusedCamera, setFocusedCamera] = useState<number | null>(null);
   const [input, setInput] = useState("");
   const [dynamicAlerts, setDynamicAlerts] = useState<any[]>([]);
+  const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string | number>>(new Set());
   const alertCooldownRef = useRef<{ [cameraId: number]: number }>({});
 
   const context = useMemo(() => {
-    // Merge static alerts with dynamic alerts
-    const allAlerts = [...museumData.alerts, ...dynamicAlerts];
+    // Merge static alerts with dynamic alerts and filter out dismissed ones
+    const allAlerts = [...museumData.alerts, ...dynamicAlerts]
+      .filter(alert => !dismissedAlertIds.has(alert.id));
     return { ...museumData, alerts: allAlerts };
-  }, [dynamicAlerts]);
+  }, [dynamicAlerts, dismissedAlertIds]);
 
   const addMessage = useCallback((role: string, content: string) => {
     setMessages((prev) => [...prev, { role, content }].slice(-MAX_MESSAGES));
@@ -124,6 +126,11 @@ export default function Page() {
     if (effects.emergency) {
       console.warn("🚨 [EMERGENCY]:", effects.emergency);
     }
+  }, []);
+
+  const handleDismissAlert = useCallback((alertId: string | number) => {
+    setDismissedAlertIds(prev => new Set(prev).add(alertId));
+    console.log('🗑️ Alert dismissed:', alertId);
   }, []);
 
   const handleAlertClick = useCallback((alert: any) => {
@@ -251,7 +258,7 @@ export default function Page() {
           </div>
 
           {/* @ts-ignore - AlertPanel is a JSX component */}
-          <AlertPanel alerts={context.alerts} onAlertClick={handleAlertClick} />
+          <AlertPanel alerts={context.alerts} onAlertClick={handleAlertClick} onDismiss={handleDismissAlert} />
 
           {/* @ts-ignore - StatsDisplay is a JSX component */}
           <StatsDisplay museumData={context} />
