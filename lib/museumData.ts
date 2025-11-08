@@ -1,7 +1,7 @@
 /**
  * Mock Museum Data for ArtGuard AI Security System
  * Simulates a Louvre-style museum with security infrastructure
- */
+ */ 
 
 export const museumData = {
   // Security Cameras

@@ -28,10 +28,10 @@ const AnimatedCamera = ({
   const [dots, setDots] = useState([]);
 
   // Configuration
-  const minDots = 5;
+  const minDots = 10;
   const maxDots = 25;
-  const speedThreshold = 0.075; // below this considered slow
-  const suspiciousTime = 3500; // ms to turn red
+  const speedThreshold = 0.045; // below this considered slow (lowered from 0.075 to reduce false positives)
+  const suspiciousTime = 6200; // ms to turn red (increased from 3500 to require longer stationary time)
 
   // Initialize dots once
   useEffect(() => {
