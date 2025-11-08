@@ -14,7 +14,8 @@ export const museumData = {
       peopleCount: 24,
       location: { x: 50, y: 20 },
       hasMotionDetection: true,
-      lastActivity: "30 seconds ago"
+      lastActivity: "30 seconds ago",
+      floorMapKey: "mainGallery" // <-- added for AnimatedCamera
     },
     {
       id: 2,
@@ -24,7 +25,8 @@ export const museumData = {
       peopleCount: 18,
       location: { x: 120, y: 80 },
       hasMotionDetection: true,
-      lastActivity: "1 minute ago"
+      lastActivity: "1 minute ago",
+      floorMapKey: "mainGallery"
     },
     {
       id: 3,
@@ -34,7 +36,8 @@ export const museumData = {
       peopleCount: 12,
       location: { x: 200, y: 100 },
       hasMotionDetection: true,
-      lastActivity: "45 seconds ago"
+      lastActivity: "45 seconds ago",
+      floorMapKey: "storageRoom"
     },
     {
       id: 4,
@@ -44,7 +47,8 @@ export const museumData = {
       peopleCount: 0,
       location: { x: 300, y: 150 },
       hasMotionDetection: true,
-      lastActivity: "15 minutes ago"
+      lastActivity: "15 minutes ago",
+      floorMapKey: "storageRoom"
     },
     {
       id: 5,
@@ -54,7 +58,8 @@ export const museumData = {
       peopleCount: 8,
       location: { x: 150, y: 200 },
       hasMotionDetection: true,
-      lastActivity: "2 minutes ago"
+      lastActivity: "2 minutes ago",
+      floorMapKey: "sculptureHall"
     },
     {
       id: 6,
@@ -64,7 +69,8 @@ export const museumData = {
       peopleCount: 2,
       location: { x: 250, y: 50 },
       hasMotionDetection: true,
-      lastActivity: "10 seconds ago"
+      lastActivity: "10 seconds ago",
+      floorMapKey: "securityOffice"
     }
   ],
 
@@ -279,29 +285,25 @@ export const museumData = {
   ]
 };
 
-// Helper function to get camera by ID
-export const getCameraById = (id) => {
+// Helper functions
+export const getCameraById = (id: number) => {
   return museumData.cameras.find(camera => camera.id === id);
 };
 
-// Helper function to get guard by name
-export const getGuardByName = (name) => {
+export const getGuardByName = (name: string) => {
   return museumData.guards.find(guard => 
     guard.name.toLowerCase().includes(name.toLowerCase())
   );
 };
 
-// Helper function to get alerts by severity
-export const getAlertsBySeverity = (severity) => {
+export const getAlertsBySeverity = (severity: string) => {
   return museumData.alerts.filter(alert => alert.severity === severity);
 };
 
-// Helper function to get room by name
-export const getRoomByName = (name) => {
+export const getRoomByName = (name: string) => {
   return museumData.rooms.find(room => 
     room.name.toLowerCase().includes(name.toLowerCase())
   );
 };
 
-// Export all for easy access
 export default museumData;
