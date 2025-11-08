@@ -14,7 +14,7 @@ import { cameraFloorMaps } from "@/lib/mapDefinitions";
 const HEADER_TITLE = "ArtGuard AI";
 const MAX_MESSAGES = 200;
 
-function CameraDisplay({ cameras = [], focusedCamera, alerts = [], onSuspiciousActivity }: { cameras?: any[]; focusedCamera: number | null; alerts?: any[]; onSuspiciousActivity: (cameraId: number, dot: any) => void }) {
+function CameraDisplay({ cameras = [], focusedCamera, alerts = [], onSuspiciousActivity, getOrInitializeDots, updateCameraDots }: { cameras?: any[]; focusedCamera: number | null; alerts?: any[]; onSuspiciousActivity: (cameraId: number, dot: any) => void; getOrInitializeDots: (cameraId: number, baseFloorMap: any) => any[]; updateCameraDots: (cameraId: number, dots: any[]) => void }) {
   // If a camera is focused, show only that camera in a larger view
   if (focusedCamera) {
     const camera = cameras.find((c) => c.id === focusedCamera);
@@ -52,7 +52,10 @@ function CameraDisplay({ cameras = [], focusedCamera, alerts = [], onSuspiciousA
             isFocused={true}
             hasAlert={alerts.some((a) => a.camera === camera.id)}
             floorMap={scaledMap}
+            baseFloorMap={originalMap}
             onSuspiciousActivity={(dot: any) => onSuspiciousActivity(camera.id, dot)}
+            getOrInitializeDots={getOrInitializeDots}
+            updateCameraDots={updateCameraDots}
           />
         </div>
       );
@@ -81,7 +84,10 @@ function CameraDisplay({ cameras = [], focusedCamera, alerts = [], onSuspiciousA
               isFocused={false}
               hasAlert={alerts.some((a) => a.camera === camera.id)}
               floorMap={floorMap}
+              baseFloorMap={floorMap}
               onSuspiciousActivity={(dot: any) => onSuspiciousActivity(camera.id, dot)}
+              getOrInitializeDots={getOrInitializeDots}
+              updateCameraDots={updateCameraDots}
             />
           </div>
         );
@@ -101,6 +107,7 @@ export default function Page() {
   const [dynamicAlerts, setDynamicAlerts] = useState<any[]>([]);
   const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string | number>>(new Set());
   const alertCooldownRef = useRef<{ [cameraId: number]: number }>({});
+  const cameraDotsRef = useRef<{ [cameraId: number]: any[] }>({});
 
   const context = useMemo(() => {
     // Merge static alerts with dynamic alerts and filter out dismissed ones
@@ -126,6 +133,31 @@ export default function Page() {
     if (effects.emergency) {
       console.warn("🚨 [EMERGENCY]:", effects.emergency);
     }
+  }, []);
+
+  const getOrInitializeDots = useCallback((cameraId: number, baseFloorMap: any) => {
+    if (!cameraDotsRef.current[cameraId]) {
+      const minDots = 10;
+      const maxDots = 35;
+      const initialDots = Array.from(
+        { length: Math.floor(Math.random() * (maxDots - minDots + 1) + minDots) },
+        () => ({
+          x: Math.random() * baseFloorMap.width,
+          y: Math.random() * baseFloorMap.height,
+          radius: 5,
+          speedX: Math.random() * 0.2 - 0.1,
+          speedY: Math.random() * 0.2 - 0.1,
+          color: "green",
+          lastMovedTime: Date.now()
+        })
+      );
+      cameraDotsRef.current[cameraId] = initialDots;
+    }
+    return cameraDotsRef.current[cameraId];
+  }, []);
+
+  const updateCameraDots = useCallback((cameraId: number, dots: any[]) => {
+    cameraDotsRef.current[cameraId] = dots;
   }, []);
 
   const handleDismissAlert = useCallback((alertId: string | number) => {
@@ -254,7 +286,7 @@ export default function Page() {
               <div className="text-gray-100 font-medium">Camera Feeds</div>
               <div className="text-xs text-gray-400">{focusedCamera ? `Focused: ${focusedCamera}` : "All feeds"}</div>
             </div>
-            <CameraDisplay cameras={context.cameras} focusedCamera={focusedCamera} alerts={context.alerts} onSuspiciousActivity={handleSuspiciousActivity} />
+            <CameraDisplay cameras={context.cameras} focusedCamera={focusedCamera} alerts={context.alerts} onSuspiciousActivity={handleSuspiciousActivity} getOrInitializeDots={getOrInitializeDots} updateCameraDots={updateCameraDots} />
           </div>
 
           {/* @ts-ignore - AlertPanel is a JSX component */}

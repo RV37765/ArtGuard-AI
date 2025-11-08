@@ -12,7 +12,10 @@ import React, { useEffect, useRef, useState } from "react";
  * - isFocused: boolean
  * - hasAlert: boolean
  * - floorMap: { width, height, obstacles: [{x, y, width, height}], zones: [...] }
+ * - baseFloorMap: { width, height, ... } - unscaled floor map for initialization
  * - onSuspiciousActivity: function(dot) => void
+ * - getOrInitializeDots: function(cameraId, baseFloorMap) => dots[]
+ * - updateCameraDots: function(cameraId, dots) => void
  */
 const AnimatedCamera = ({
   cameraId,
@@ -21,7 +24,10 @@ const AnimatedCamera = ({
   isFocused,
   hasAlert,
   floorMap,
-  onSuspiciousActivity
+  baseFloorMap,
+  onSuspiciousActivity,
+  getOrInitializeDots,
+  updateCameraDots
 }) => {
   const canvasRef = useRef(null);
   const dotsRef = useRef([]);
@@ -33,23 +39,23 @@ const AnimatedCamera = ({
   const speedThreshold = 0.025; // below this considered slow - very low to catch only truly stationary dots
   const suspiciousTime = 8000; // ms to turn red (12 seconds - people naturally pause to view art)
 
-  // Initialize dots once
+  // Initialize dots once per camera
   useEffect(() => {
-    const initialDots = Array.from(
-      { length: Math.floor(Math.random() * (maxDots - minDots + 1) + minDots) },
-      () => ({
-        x: Math.random() * floorMap.width,
-        y: Math.random() * floorMap.height,
-        radius: 5,
-        speedX: Math.random() * 0.2 - 0.1,
-        speedY: Math.random() * 0.2 - 0.1,
-        color: "green",
-        lastMovedTime: Date.now()
-      })
-    );
-    setDots(initialDots);
-    dotsRef.current = initialDots;
-  }, [floorMap.width, floorMap.height]);
+    const baseDots = getOrInitializeDots(cameraId, baseFloorMap);
+
+    // Scale dots if floorMap size differs from baseFloorMap
+    const scaleX = floorMap.width / baseFloorMap.width;
+    const scaleY = floorMap.height / baseFloorMap.height;
+
+    const scaledDots = baseDots.map(dot => ({
+      ...dot,
+      x: dot.x * scaleX,
+      y: dot.y * scaleY
+    }));
+
+    setDots(scaledDots);
+    dotsRef.current = scaledDots;
+  }, [cameraId, floorMap.width, floorMap.height, baseFloorMap.width, baseFloorMap.height, getOrInitializeDots]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -142,11 +148,21 @@ const AnimatedCamera = ({
 
       dotsRef.current = updatedDots;
 
+      // Save dots back to parent in base (unscaled) coordinates
+      const scaleX = baseFloorMap.width / floorMap.width;
+      const scaleY = baseFloorMap.height / floorMap.height;
+      const unscaledDots = updatedDots.map(dot => ({
+        ...dot,
+        x: dot.x * scaleX,
+        y: dot.y * scaleY
+      }));
+      updateCameraDots(cameraId, unscaledDots);
+
       requestAnimationFrame(animate);
     }
 
     animate();
-  }, [cameraName, floorMap, onSuspiciousActivity]);
+  }, [cameraName, floorMap, baseFloorMap, onSuspiciousActivity, updateCameraDots, cameraId]);
 
   return (
     <canvas
