@@ -14,7 +14,7 @@ import { cameraFloorMaps } from "@/lib/mapDefinitions";
 const HEADER_TITLE = "ArtGuard AI";
 const MAX_MESSAGES = 200;
 
-function CameraDisplay({ cameras = [], focusedCamera, alerts = [], onSuspiciousActivity, getOrInitializeDots, updateCameraDots }: { cameras?: any[]; focusedCamera: number | null; alerts?: any[]; onSuspiciousActivity: (cameraId: number, dot: any) => void; getOrInitializeDots: (cameraId: number, baseFloorMap: any) => any[]; updateCameraDots: (cameraId: number, dots: any[]) => void }) {
+function CameraDisplay({ cameras = [], focusedCamera, alerts = [], onSuspiciousActivity, getOrInitializeDots, updateCameraDots, isLockdown, showOnlySuspicious }: { cameras?: any[]; focusedCamera: number | null; alerts?: any[]; onSuspiciousActivity: (cameraId: number, dot: any) => void; getOrInitializeDots: (cameraId: number, baseFloorMap: any) => any[]; updateCameraDots: (cameraId: number, dots: any[]) => void; isLockdown: boolean; showOnlySuspicious: boolean }) {
   // If a camera is focused, show only that camera in a larger view
   if (focusedCamera) {
     const camera = cameras.find((c) => c.id === focusedCamera);
@@ -30,12 +30,14 @@ function CameraDisplay({ cameras = [], focusedCamera, alerts = [], onSuspiciousA
         width: originalMap.width * scaleFactor,
         height: originalMap.height * scaleFactor,
         obstacles: originalMap.obstacles.map(obs => ({
+          ...obs, // Preserve all properties including label
           x: obs.x * scaleFactor,
           y: obs.y * scaleFactor,
           width: obs.width * scaleFactor,
           height: obs.height * scaleFactor
         })),
         zones: originalMap.zones.map(zone => ({
+          ...zone, // Preserve all properties including label
           x: zone.x * scaleFactor,
           y: zone.y * scaleFactor,
           width: zone.width * scaleFactor,
@@ -48,6 +50,7 @@ function CameraDisplay({ cameras = [], focusedCamera, alerts = [], onSuspiciousA
           <AnimatedCamera
             cameraId={camera.id}
             cameraName={camera.name}
+            room={camera.room}
             peopleCount={camera.peopleCount || 5}
             isFocused={true}
             hasAlert={alerts.some((a) => a.camera === camera.id)}
@@ -56,6 +59,8 @@ function CameraDisplay({ cameras = [], focusedCamera, alerts = [], onSuspiciousA
             onSuspiciousActivity={(dot: any) => onSuspiciousActivity(camera.id, dot)}
             getOrInitializeDots={getOrInitializeDots}
             updateCameraDots={updateCameraDots}
+            isLockdown={isLockdown}
+            showOnlySuspicious={showOnlySuspicious}
           />
         </div>
       );
@@ -80,6 +85,7 @@ function CameraDisplay({ cameras = [], focusedCamera, alerts = [], onSuspiciousA
             <AnimatedCamera
               cameraId={camera.id}
               cameraName={camera.name}
+              room={camera.room}
               peopleCount={camera.peopleCount || 5}
               isFocused={false}
               hasAlert={alerts.some((a) => a.camera === camera.id)}
@@ -88,6 +94,8 @@ function CameraDisplay({ cameras = [], focusedCamera, alerts = [], onSuspiciousA
               onSuspiciousActivity={(dot: any) => onSuspiciousActivity(camera.id, dot)}
               getOrInitializeDots={getOrInitializeDots}
               updateCameraDots={updateCameraDots}
+              isLockdown={isLockdown}
+              showOnlySuspicious={showOnlySuspicious}
             />
           </div>
         );
@@ -106,6 +114,8 @@ export default function Page() {
   const [input, setInput] = useState("");
   const [dynamicAlerts, setDynamicAlerts] = useState<any[]>([]);
   const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string | number>>(new Set());
+  const [isLockdown, setIsLockdown] = useState(false);
+  const [showOnlySuspicious, setShowOnlySuspicious] = useState(false);
   const alertCooldownRef = useRef<{ [cameraId: number]: number }>({});
   const cameraDotsRef = useRef<{ [cameraId: number]: any[] }>({});
 
@@ -130,6 +140,25 @@ export default function Page() {
       setFocusedCamera(null);
       console.log("📹 [UI] showAllCameras");
     }
+    if (typeof effects.lockdown !== "undefined") {
+      setIsLockdown(effects.lockdown);
+      if (effects.lockdown) {
+        // Clear all alerts on lockdown
+        setDynamicAlerts([]);
+        setDismissedAlertIds(new Set());
+        // Reset all dots to fresh state (will be hidden by lockdown mode)
+        cameraDotsRef.current = {};
+        console.log("🔒 [UI] Lockdown initiated");
+      } else {
+        // On release, reset dots (they'll reinitialize fresh and green)
+        cameraDotsRef.current = {};
+        console.log("🔓 [UI] Lockdown released");
+      }
+    }
+    if (typeof effects.showOnlySuspicious !== "undefined") {
+      setShowOnlySuspicious(effects.showOnlySuspicious);
+      console.log("👁️ [UI] Show only suspicious:", effects.showOnlySuspicious);
+    }
     if (effects.emergency) {
       console.warn("🚨 [EMERGENCY]:", effects.emergency);
     }
@@ -139,17 +168,54 @@ export default function Page() {
     if (!cameraDotsRef.current[cameraId]) {
       const minDots = 10;
       const maxDots = 35;
+      const obstacles = baseFloorMap.obstacles || [];
+
+      // Helper function to check if a position overlaps with any obstacle
+      const isInsideObstacle = (x: number, y: number, radius: number) => {
+        return obstacles.some((obs: any) => {
+          // Skip stairs - allow spawning on stairs
+          if (obs.label && obs.label.toLowerCase().includes('stairs')) {
+            return false;
+          }
+          // Add a margin (2x radius) to ensure dots don't spawn too close to edges
+          const margin = radius * 2;
+          return (
+            x + margin > obs.x &&
+            x - margin < obs.x + obs.width &&
+            y + margin > obs.y &&
+            y - margin < obs.y + obs.height
+          );
+        });
+      };
+
+      // Helper function to generate a valid position
+      const getValidPosition = () => {
+        let attempts = 0;
+        let x, y;
+        const radius = 5;
+        const margin = 10; // Keep dots away from walls
+        do {
+          x = margin + Math.random() * (baseFloorMap.width - margin * 2);
+          y = margin + Math.random() * (baseFloorMap.height - margin * 2);
+          attempts++;
+        } while (isInsideObstacle(x, y, radius) && attempts < 100);
+        return { x, y };
+      };
+
       const initialDots = Array.from(
         { length: Math.floor(Math.random() * (maxDots - minDots + 1) + minDots) },
-        () => ({
-          x: Math.random() * baseFloorMap.width,
-          y: Math.random() * baseFloorMap.height,
-          radius: 5,
-          speedX: Math.random() * 0.2 - 0.1,
-          speedY: Math.random() * 0.2 - 0.1,
-          color: "green",
-          lastMovedTime: Date.now()
-        })
+        () => {
+          const { x, y } = getValidPosition();
+          return {
+            x,
+            y,
+            radius: 5,
+            speedX: Math.random() * 0.2 - 0.1,
+            speedY: Math.random() * 0.2 - 0.1,
+            color: "green",
+            lastMovedTime: Date.now()
+          };
+        }
       );
       cameraDotsRef.current[cameraId] = initialDots;
     }
@@ -181,7 +247,7 @@ export default function Page() {
 
     const now = Date.now();
     const lastAlertTime = alertCooldownRef.current[cameraId] || 0;
-    const cooldownPeriod = 60000; // 60 seconds between alerts per camera
+    const cooldownPeriod = 45000; // 45 seconds between alerts per camera
 
     // Check cooldown - don't spam alerts
     if (now - lastAlertTime < cooldownPeriod) {
@@ -281,12 +347,14 @@ export default function Page() {
 
         {/* RIGHT */}
         <div className="col-span-12 lg:col-span-8 space-y-4">
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 h-[600px] flex flex-col">
             <div className="flex items-center justify-between mb-3">
               <div className="text-gray-100 font-medium">Camera Feeds</div>
               <div className="text-xs text-gray-400">{focusedCamera ? `Focused: ${focusedCamera}` : "All feeds"}</div>
             </div>
-            <CameraDisplay cameras={context.cameras} focusedCamera={focusedCamera} alerts={context.alerts} onSuspiciousActivity={handleSuspiciousActivity} getOrInitializeDots={getOrInitializeDots} updateCameraDots={updateCameraDots} />
+            <div className="flex-1 flex items-center justify-center overflow-hidden">
+              <CameraDisplay cameras={context.cameras} focusedCamera={focusedCamera} alerts={context.alerts} onSuspiciousActivity={handleSuspiciousActivity} getOrInitializeDots={getOrInitializeDots} updateCameraDots={updateCameraDots} isLockdown={isLockdown} showOnlySuspicious={showOnlySuspicious} />
+            </div>
           </div>
 
           {/* @ts-ignore - AlertPanel is a JSX component */}
