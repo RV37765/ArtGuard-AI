@@ -34,7 +34,7 @@ AI-powered, voice-controlled security system for the Louvre Museum featuring rea
 - **Lockdown mode** - Empty rooms with "LOCKDOWN" status indicator
 - **Suspicious filter** - Shows count of red/suspicious individuals when filtering
 
-### 🚨 Dynamic Alert System
+### Dynamic Alert System
 - **Auto-generated alerts** from suspicious loitering behavior
 - **Color-coded severity levels:**
   - 🔴 Critical/High - Pulsing animation
@@ -46,7 +46,7 @@ AI-powered, voice-controlled security system for the Louvre Museum featuring rea
 - **Lockdown integration** - All alerts cleared when lockdown initiated
 - **Alert types:** Suspicious loitering, motion detection, large crowds, access violations
 
-### 📊 Enhanced Dashboard
+### Enhanced Dashboard
 - **Stats Display** with real-time indicators:
   - 6 cameras across Denon, Sully, and Richelieu wings
   - 4 French security agents (Agent Dubois, Moreau, Laurent, Rousseau)
